@@ -3,6 +3,15 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+// Mock Platform for Node test environment
+const Platform = {
+  OS: process.env.TEST_PLATFORM === 'web' ? 'web' : 'ios',
+  select: (obj: { ios?: unknown; android?: unknown; web?: unknown; default?: unknown }) => {
+    const os = Platform.OS;
+    return obj[os as keyof typeof obj] ?? obj.default;
+  },
+};
+
 export type SQLiteBindValue =
   number | string | boolean | null | Uint8Array | ArrayBuffer | undefined;
 
@@ -129,7 +138,26 @@ export class SQLiteDatabase {
   async withExclusiveTransactionAsync<T>(
     callback: (db: SQLiteDatabase) => Promise<T>,
   ): Promise<T> {
+    // Simulate the real expo-sqlite behavior: throw on web
+    if (Platform.OS === 'web') {
+      throw new Error('withExclusiveTransactionAsync is not supported on web');
+    }
     this.db.run('BEGIN IMMEDIATE');
+    try {
+      const result = await callback(this);
+      this.db.run('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.run('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async withTransactionAsync<T>(
+    callback: (db: SQLiteDatabase) => Promise<T>,
+  ): Promise<T> {
+    // Regular transaction (BEGIN/COMMIT/ROLLBACK) - works on all platforms
+    this.db.run('BEGIN');
     try {
       const result = await callback(this);
       this.db.run('COMMIT');
@@ -195,3 +223,6 @@ export const Storage = {
   ...AsyncStorage,
   setItemSync: () => undefined,
 };
+
+// Export Platform for tests that need to check/set it
+export { Platform };

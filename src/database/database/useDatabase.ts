@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { databaseManager } from './DatabaseManager';
+import { userProfileRepository } from '../repositories/UserProfileRepository';
+import { UserProfile } from '../models/UserProfile';
 
 export type DatabaseStatus = 'initializing' | 'ready' | 'error';
 
@@ -50,5 +52,38 @@ export function useDatabase(): UseDatabaseResult {
       setError(null);
       setAttempt((current) => current + 1);
     },
+  };
+}
+
+/**
+ * Hook to fetch and manage user profiles.
+ */
+export function useUserProfiles() {
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchProfiles = async () => {
+    try {
+      setLoading(true);
+      const data = await userProfileRepository.getAll();
+      setProfiles(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
+
+  return {
+    profiles,
+    loading,
+    error,
+    refresh: fetchProfiles,
   };
 }

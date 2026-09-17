@@ -5,6 +5,7 @@ import {
   DatabaseMigrationError,
   DatabaseQueryError,
 } from '../../errors/DatabaseError';
+import { runInTransactionAsync } from '../transactions';
 
 export class MigrationRunner {
   private migrations: Migration[] = [];
@@ -114,7 +115,7 @@ export class MigrationRunner {
 
   private async runMigration(db: SQLiteDatabase, migration: Migration): Promise<void> {
     try {
-      await db.withExclusiveTransactionAsync(async (txn) => {
+      await runInTransactionAsync(db, async (txn) => {
         await migration.up(txn);
         await txn.runAsync(
           'INSERT INTO schema_migrations (version, name) VALUES (?, ?)',
@@ -151,7 +152,7 @@ export class MigrationRunner {
       }
 
       try {
-        await db.withExclusiveTransactionAsync(async (txn) => {
+        await runInTransactionAsync(db, async (txn) => {
           await migration.down!(txn);
           await txn.runAsync(
             'DELETE FROM schema_migrations WHERE version = ?',

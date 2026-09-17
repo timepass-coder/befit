@@ -9,3 +9,5 @@ export * from './repositories/Repository';
 export * from './repositories/BaseRepository';
 export * from './models/UserProfile';
 export * from './repositories/UserProfileRepository';
+export * from './seeds';
+export * from './debug';

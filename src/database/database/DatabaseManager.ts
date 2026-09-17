@@ -9,6 +9,7 @@ import {
   DatabaseConnectionError,
   isDatabaseError,
 } from '../errors/DatabaseError';
+import { runInTransactionAsync } from './transactions';
 
 migrationRunner.registerMigrations([
   initialSchemaMigration,
@@ -49,7 +50,12 @@ export class DatabaseManager {
       return this.initializationPromise;
     }
 
-    this.initializationPromise = this.doInitialize();
+    this.initializationPromise = this.doInitialize().finally(() => {
+      // Clear the cached promise so that a subsequent retry can start fresh.
+      // This fixes the bug where the Retry button did nothing because
+      // the rejected promise was cached and re-awaited on every retry.
+      this.initializationPromise = null;
+    });
     return this.initializationPromise;
   }
 
@@ -116,7 +122,7 @@ export class DatabaseManager {
   ): Promise<T> {
     const db = this.getDatabase();
     let result: T;
-    await db.withExclusiveTransactionAsync(async (txn) => {
+    await runInTransactionAsync(db, async (txn) => {
       result = await callback(txn);
     });
     return result!;
