@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import { Migration, MigrationRecord } from './Migration';
+import { Migration, MigrationRecord, createMigrationTableSql } from './Migration';
 import { DATABASE_VERSION } from '../DatabaseConfig';
 import {
   DatabaseMigrationError,
@@ -45,29 +45,71 @@ export class MigrationRunner {
     }
   }
 
+  private async ensureMigrationTable(db: SQLiteDatabase): Promise<void> {
+    try {
+      await db.execAsync(createMigrationTableSql);
+    } catch (error) {
+      throw new DatabaseMigrationError(
+        'Failed to ensure schema_migrations table',
+        error as Error,
+      );
+    }
+  }
+
   async runMigrations(db: SQLiteDatabase): Promise<void> {
-    const currentVersion = await this.getCurrentVersion(db);
+    await this.ensureMigrationTable(db);
+
     const targetVersion = DATABASE_VERSION;
 
-    if (currentVersion >= targetVersion) {
+    // The schema_migrations rows are the source of truth for which migrations
+    // have actually been applied. Relying only on PRAGMA user_version is not
+    // safe: user_version is written at the end of a migration run and can fall
+    // out of sync (e.g. an interrupted run), which would otherwise cause an
+    // already-applied migration to re-run and fail on its bookkeeping insert.
+    const appliedVersions = new Set(
+      (await this.getAppliedMigrations(db)).map((m) => m.version),
+    );
+    const maxApplied = Math.max(0, ...appliedVersions);
+
+    if (maxApplied >= targetVersion) {
+      // Reconcile user_version so it matches the source of truth even when
+      // there is nothing to apply (e.g. left stale by an interrupted run).
+      const currentVersion = await this.getCurrentVersion(db);
+      if (currentVersion !== maxApplied) {
+        await db.execAsync(`PRAGMA user_version = ${maxApplied}`);
+      }
       return;
     }
 
-    const pendingMigrations = this.migrations.filter(
-      (m) => m.version > currentVersion && m.version <= targetVersion
-    );
+    const pendingMigrations = this.migrations
+      .filter(
+        (m) =>
+          m.version >= 1 &&
+          m.version <= targetVersion &&
+          !appliedVersions.has(m.version),
+      )
+      .sort((a, b) => a.version - b.version);
 
     if (pendingMigrations.length === 0) {
       throw new DatabaseMigrationError(
-        `No migrations found for versions ${currentVersion + 1} to ${targetVersion}`
+        `No migrations found for versions ${maxApplied + 1} to ${targetVersion}`
       );
     }
 
     for (const migration of pendingMigrations) {
       await this.runMigration(db, migration);
+      // Keep user_version in sync as each migration is applied so it matches
+      // the recorded schema_migrations rows even if a later step fails.
+      await db.execAsync(`PRAGMA user_version = ${migration.version}`);
     }
 
-    await db.execAsync(`PRAGMA user_version = ${targetVersion}`);
+    // Re-sync user_version to the highest applied version so a stale value
+    // (e.g. 0 from an interrupted prior run) is reconciled going forward.
+    const appliedAfterRun = (await this.getAppliedMigrations(db)).map(
+      (m) => m.version,
+    );
+    const maxAppliedAfterRun = Math.max(0, ...appliedAfterRun);
+    await db.execAsync(`PRAGMA user_version = ${maxAppliedAfterRun}`);
   }
 
   private async runMigration(db: SQLiteDatabase, migration: Migration): Promise<void> {
@@ -89,6 +131,8 @@ export class MigrationRunner {
   }
 
   async rollbackMigration(db: SQLiteDatabase, targetVersion: number): Promise<void> {
+    await this.ensureMigrationTable(db);
+
     const currentVersion = await this.getCurrentVersion(db);
 
     if (targetVersion >= currentVersion) {

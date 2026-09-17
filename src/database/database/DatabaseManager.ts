@@ -3,14 +3,17 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import { defaultDatabaseConfig, DatabaseConfig } from './DatabaseConfig';
 import { migrationRunner } from './migrations/MigrationRunner';
 import { initialSchemaMigration } from './migrations/001_initial_schema';
+import { createUserProfilesMigration } from './migrations/002_create_user_profiles';
 import {
   DatabaseInitializationError,
   DatabaseConnectionError,
-  DatabaseError,
   isDatabaseError,
 } from '../errors/DatabaseError';
 
-migrationRunner.registerMigration(initialSchemaMigration);
+migrationRunner.registerMigrations([
+  initialSchemaMigration,
+  createUserProfilesMigration,
+]);
 
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null;
