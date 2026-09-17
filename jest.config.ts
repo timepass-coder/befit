@@ -14,7 +14,7 @@ const config: Config = {
   coverageDirectory: 'coverage',
   verbose: true,
   moduleNameMapper: {
-    '^expo-sqlite$': '<rootDir>/src/__mocks__/expo-sqlite.ts',
+    '^expo-sqlite$': '<rootDir>/src/database/testing/sqljs-expo-sqlite.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/src/__mocks__/jest-setup.ts'],
@@ -26,11 +26,6 @@ const config: Config = {
         useESM: false,
       },
     ],
-  },
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.json',
-    },
   },
 };
 

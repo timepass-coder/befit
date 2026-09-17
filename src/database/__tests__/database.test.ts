@@ -221,9 +221,9 @@ describe('Database Foundation', () => {
     });
 
     it('should wrap database errors in DatabaseError', async () => {
+      expect.assertions(2);
       try {
-        const db = databaseManager.getDatabase();
-        await db.runAsync('INSERT INTO non_existent_table (col) VALUES (?)', 'test');
+        await dbTestRecordRepository.find({ non_existent_column: 'test' });
       } catch (error) {
         expect(isDatabaseError(error)).toBe(true);
         if (isDatabaseError(error)) {

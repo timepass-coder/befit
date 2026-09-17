@@ -1,19 +1,45 @@
-import initSqlJs from 'sql.js';
+import initSqlJs, { type SqlValue } from 'sql.js';
 
 export type SQLiteBindValue =
   number | string | boolean | null | Uint8Array | ArrayBuffer | undefined;
 
-export class SQLiteDatabase {
-  private readonly db: ReturnType<typeof initSqlJs> extends Promise<infer T>
-    ? T['Database']
-    : never;
+type SqlJsDatabase = initSqlJs.Database;
 
-  constructor(
-    db: ReturnType<typeof initSqlJs> extends Promise<infer T>
-      ? T['Database']
-      : never,
-  ) {
+type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
+
+const snapshots = new Map<string, Uint8Array>();
+
+let sqlModulePromise: Promise<SqlJsModule> | null = null;
+
+function getSql(): Promise<SqlJsModule> {
+  if (!sqlModulePromise) {
+    sqlModulePromise = initSqlJs();
+  }
+  return sqlModulePromise;
+}
+
+function toBindParams(params: SQLiteBindValue[]): SqlValue[] {
+  return params.map((param) => {
+    if (param === undefined) {
+      return null;
+    }
+    if (typeof param === 'boolean') {
+      return param ? 1 : 0;
+    }
+    if (param instanceof ArrayBuffer) {
+      return new Uint8Array(param);
+    }
+    return param as SqlValue;
+  });
+}
+
+export class SQLiteDatabase {
+  private readonly db: SqlJsDatabase;
+  private readonly name: string;
+
+  constructor(db: SqlJsDatabase, name: string) {
     this.db = db;
+    this.name = name;
   }
 
   async execAsync(sql: string): Promise<void> {
@@ -24,13 +50,13 @@ export class SQLiteDatabase {
     sql: string,
     ...params: SQLiteBindValue[]
   ): Promise<{ lastInsertRowId: number; changes: number }> {
-    this.db.run(sql, ...params);
+    this.db.run(sql, toBindParams(params));
 
+    const changes = Number(this.db.getRowsModified() ?? 0);
     const lastInsertRowId = Number(
       this.db.exec('SELECT last_insert_rowid() AS id')[0]?.values?.[0]?.[0] ??
         0,
     );
-    const changes = Number(this.db.getRowsModified() ?? 0);
 
     return {
       lastInsertRowId,
@@ -55,7 +81,7 @@ export class SQLiteDatabase {
 
     try {
       if (params.length > 0) {
-        stmt.bind(params as unknown[]);
+        stmt.bind(toBindParams(params));
       }
 
       while (stmt.step()) {
@@ -83,13 +109,17 @@ export class SQLiteDatabase {
   }
 
   async closeAsync(): Promise<void> {
+    const bytes = this.db.export();
+    snapshots.set(this.name, bytes);
     this.db.close();
   }
 }
 
 export async function openDatabaseAsync(name: string): Promise<SQLiteDatabase> {
-  const SQL = await initSqlJs();
-  return new SQLiteDatabase(new SQL.Database());
+  const SQL = await getSql();
+  const snapshot = snapshots.get(name);
+  const db = snapshot ? new SQL.Database(snapshot) : new SQL.Database();
+  return new SQLiteDatabase(db, name);
 }
 
 export function openDatabaseSync(name: string): SQLiteDatabase {

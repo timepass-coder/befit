@@ -14,9 +14,6 @@ const config: Config = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json', useESM: false }],
   },
-  globals: {
-    'ts-jest': { tsconfig: 'tsconfig.json' },
-  },
 };
 
 export default config;
