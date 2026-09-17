@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Gym App",
+    "slug": "gym-app",
+    "plugins": [
+      "expo-sqlite"
+    ]
+  }
+}

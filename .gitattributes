@@ -1,0 +1,4 @@
+# Normalize all text files to LF in the repository and in the working tree.
+# Prevents core.autocrlf=true from rewriting files to CRLF on checkout,
+# which would otherwise fail `prettier --check` (endOfLine: lf).
+* text=auto eol=lf

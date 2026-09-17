@@ -1,0 +1,13 @@
+# Dependencies and build output
+node_modules/
+dist/
+.expo/
+
+# Generated lockfile
+package-lock.json
+
+# Expo-generated TypeScript declarations
+expo-env.d.ts
+
+# Binary and generated assets
+assets/
